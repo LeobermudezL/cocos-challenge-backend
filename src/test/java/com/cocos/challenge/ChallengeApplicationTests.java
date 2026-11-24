@@ -18,24 +18,35 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.json.JsonCompareMode;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.context.WebApplicationContext;
 import org.testcontainers.postgresql.PostgreSQLContainer;
 
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @Import(ChallengeApplicationTests.PostgresConfiguration.class)
 @Transactional
 class ChallengeApplicationTests {
+
+    private static final String INSTRUMENTS_PATH = "/api/v1/instruments";
 
     @Autowired
     private UserRepository users;
@@ -57,6 +68,13 @@ class ChallengeApplicationTests {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    private MockMvc mvc;
+
+    @Autowired
+    void configureMvc(WebApplicationContext context) {
+        mvc = MockMvcBuilders.webAppContextSetup(context).build();
+    }
 
     @Test
     void loadsSeedOrdersAndPersistsNewOrder() {
@@ -110,6 +128,66 @@ class ChallengeApplicationTests {
                 .containsExactly("LOMA");
         assertThat(instruments.searchTradable("dyca", "negra")).isEmpty();
         assertThat(instruments.searchTradable("%", null)).isEmpty();
+    }
+
+    @Test
+    void listsAllTradableInstrumentsForAbsentAndBlankFilters() throws Exception {
+        var all = mvc.perform(get(INSTRUMENTS_PATH))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(65))
+                .andExpect(jsonPath("$[0].ticker").value("AGRO"))
+                .andExpect(jsonPath("$[?(@.ticker == 'ARS')]").isEmpty())
+                .andReturn().getResponse().getContentAsString();
+
+        mvc.perform(get(INSTRUMENTS_PATH).param("ticker", "  ").param("name", "\t "))
+                .andExpect(status().isOk())
+                .andExpect(content().string(all));
+    }
+
+    @Test
+    void appliesCaseInsensitivePartialFiltersIndividuallyAndTogether() throws Exception {
+        mvc.perform(get(INSTRUMENTS_PATH).param("ticker", " dYc ").param("name", ""))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ticker").value("DYCA"));
+
+        mvc.perform(get(INSTRUMENTS_PATH).param("name", "nEgRa"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].ticker").value("LOMA"));
+
+        mvc.perform(get(INSTRUMENTS_PATH).param("ticker", " oM ").param("name", " nEgRa "))
+                .andExpect(status().isOk())
+                .andExpect(content().json("""
+                        [{"id":45,"ticker":"LOMA","name":"Loma Negra S.A.","type":"ACCIONES"}]
+                        """, JsonCompareMode.STRICT));
+    }
+
+    @Test
+    void returnsEmptyListForMismatchedFiltersAndCashInstrument() throws Exception {
+        mvc.perform(get(INSTRUMENTS_PATH).param("ticker", "dyca").param("name", "negra"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+
+        mvc.perform(get(INSTRUMENTS_PATH).param("ticker", "ARS").param("name", "PESOS"))
+                .andExpect(status().isOk())
+                .andExpect(content().json("[]"));
+    }
+
+    @Test
+    void matchesWildcardCharactersLiterallyAndOrdersEqualTickersById() throws Exception {
+        jdbc.update("""
+                insert into instruments (ticker, name, type)
+                values ('T%_TEST', 'Zeta', 'ACCIONES'), ('T%_TEST', 'Alpha', 'ACCIONES')
+                """);
+
+        for (String wildcard : List.of("%", "_")) {
+            mvc.perform(get(INSTRUMENTS_PATH).param("ticker", wildcard))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].name").value("Zeta"))
+                    .andExpect(jsonPath("$[1].name").value("Alpha"));
+        }
     }
 
     @Test
