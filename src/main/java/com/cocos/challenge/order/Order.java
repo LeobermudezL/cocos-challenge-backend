@@ -58,6 +58,7 @@ public class Order {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 20)
+    @ColumnTransformer(read = "case when status in ('NEW', 'FILLED', 'REJECTED', 'CANCELLED') then status end")
     private OrderStatus status;
 
     @Column(name = "datetime")
@@ -86,6 +87,14 @@ public class Order {
             throw new IllegalArgumentException("Order price must be exactly representable as NUMERIC(10,2)");
         }
         return price.setScale(PRICE_SCALE);
+    }
+
+    public boolean cancel() {
+        if (status != OrderStatus.NEW) {
+            return false;
+        }
+        status = OrderStatus.CANCELLED;
+        return true;
     }
 
     public Integer getId() {

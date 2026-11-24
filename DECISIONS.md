@@ -21,6 +21,7 @@
 - Reject duplicate fields when parsing JSON request bodies across the application. Requests with duplicate fields receive HTTP 400.
 - Accept exactly one of quantity or ARS amount for both buys and sells. A market order uses the latest close. A limit order uses the supplied limit price.
 - Return HTTP 201 for persisted submissions, including `REJECTED` orders. Return HTTP 400 for invalid requests, HTTP 404 for unknown resources, and HTTP 409 for invalid state transitions. Only `NEW` orders can be cancelled.
+- Return HTTP 200 with the updated order on cancellation. Return HTTP 404 for orders owned by another user. A repeated cancellation or an order with a null or unrecognized stored status returns HTTP 409. Treat unrecognized statuses as unknown on reads and retain the original stored value.
 - Order requests use JSON numbers for instrument ID, quantity, amount and price. Omit unused numeric fields. A market order without a usable latest dated close returns HTTP 400 and creates no order. A newer quote with an unusable close takes precedence over an older usable quote.
 - Insufficient or unknown required resources produce a persisted `REJECTED` order. Buy authorization depends on available cash. Sell authorization depends on available shares of the requested instrument. Other resource uncertainty does not affect that decision.
 - Use case-insensitive partial matching for ticker and name. Combine supplied filters with AND. Return all tradable instruments when neither filter is supplied. Exclude the ARS cash instrument from search and buy or sell submissions.
@@ -40,3 +41,4 @@
 - Portfolio reads use a read-only PostgreSQL `REPEATABLE READ` transaction. Load orders and their instruments together, then fetch latest quotes for all open positions in one query.
 - Order submission and cancellation must acquire a pessimistic write lock on the same user row within their transaction before reading balances, holdings, or order state. Hold the lock through the write.
 - Order submission uses `READ COMMITTED` so the account ledger read after lock acquisition sees orders committed by the previous holder. Store order timestamps in UTC at PostgreSQL timestamp precision.
+- Cancellation also uses `READ COMMITTED` and loads the order after acquiring the user lock. Hibernate updates the status in place. The ledger excludes the cancelled order when calculating reservations.

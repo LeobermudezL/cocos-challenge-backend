@@ -12,9 +12,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class OrderController {
 
     private final OrderSubmissionService submissions;
+    private final OrderCancellationService cancellations;
 
-    public OrderController(OrderSubmissionService submissions) {
+    public OrderController(OrderSubmissionService submissions, OrderCancellationService cancellations) {
         this.submissions = submissions;
+        this.cancellations = cancellations;
     }
 
     @PostMapping("/api/v1/users/{userId}/orders")
@@ -22,5 +24,10 @@ public class OrderController {
     public OrderResponse submit(@PathVariable("userId") Integer userId,
                                 @Valid @RequestBody OrderSubmissionRequest request) {
         return submissions.submit(userId, request);
+    }
+
+    @PostMapping("/api/v1/users/{userId}/orders/{orderId}/cancel")
+    public OrderResponse cancel(@PathVariable("userId") Integer userId, @PathVariable("orderId") Integer orderId) {
+        return cancellations.cancel(userId, orderId);
     }
 }

@@ -83,7 +83,7 @@ public class OrderSubmissionService {
         }
         var datetime = LocalDateTime.now(ZoneOffset.UTC).truncatedTo(ChronoUnit.MICROS);
         var order = orders.save(new Order(instrument, user, quantity, price, type, side, status, datetime));
-        return new OrderResponse(order.getId(), userId, instrumentId, side, type, status, quantity, price, datetime);
+        return OrderResponse.from(order);
     }
 
     private BigDecimal marketPrice(Integer instrumentId) {
