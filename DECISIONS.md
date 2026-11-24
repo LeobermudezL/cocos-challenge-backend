@@ -2,16 +2,19 @@
 
 ## Portfolio
 
-- Calculate total unrealized position return using weighted-average acquisition cost. Reduce shares sold at their current weighted-average cost.
+- Calculate total unrealized position return using the exact weighted-average acquisition cost ratio. Partial sales leave the ratio unchanged. Round the percentage only when constructing the response.
 - Include daily return as `(close - previousclose) / previousclose × 100`. Return null for undefined values, including a zero denominator.
 - Exclude undated quotes and select the latest quote by `date DESC, id DESC`. Market value is signed shares times closing price and requires a close. Unrealized return also requires a defined acquisition cost basis. Return null for a missing position valuation or an undefined return, and for the total account value if a required position valuation is missing.
 - Preserve historical negative holdings. The seed has a filled buy of 20 shares followed by a filled sale of 30 shares for user 1 and instrument 31. Report the resulting −10 shares and include their signed market value in the account total when a close is available. Their unrealized return is null because the cost basis is undefined. Preserve the source orders.
+- A purchase that covers a historical negative holding establishes a cost basis only for the newly held shares. A filled purchase without a recorded price leaves its long cost basis and the actual cash balance unknown.
 
 ## Cash and reservations
 
 - Only `FILLED` orders affect actual cash and holdings. Include filled `CASH_IN` and `CASH_OUT` movements in ARS cash.
 - A `NEW` buy reserves cash. A `NEW` sell reserves shares. Cancellation releases the reservation.
 - Reserved cash counts toward total account value. Deduct it from available cash only.
+- Ignore orders explicitly marked `CANCELLED` or `REJECTED`. An unknown status can affect both actual balances and reservations. Unknown side, quantity, or price leaves the calculations that depend on those fields unknown. A filled trade with a known quantity and missing price still updates shares. An undated filled trade leaves cash and shares calculable, but makes cost basis unknown for that instrument when sales make trade order relevant.
+- Pending buys and sells require positive quantities and prices. An incomplete or invalid reservation leaves the affected cash or share availability unknown. Share uncertainty is scoped to the instrument when it can be identified. An unidentified filled trade can obscure any holding and makes the account total unknown. An identifiable holding with unknown quantity has null shares, market value, and unrealized return. Preserve independently known outputs and use null availability to signal that resources cannot be verified.
 
 ## API behavior
 
@@ -31,4 +34,5 @@
 ## Persistence and concurrency
 
 - Preserve the supplied PostgreSQL schema. Hibernate validates it at startup. Integration tests load the original `database.sql` into isolated Testcontainers PostgreSQL.
+- Portfolio reads use a read-only PostgreSQL `REPEATABLE READ` transaction. Load orders and their instruments together, then fetch latest quotes for all open positions in one query.
 - Order submission and cancellation must acquire a pessimistic write lock on the same user row within their transaction before reading balances, holdings, or order state. Hold the lock through the write.

@@ -13,12 +13,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "orders")
+@DynamicUpdate
 public class Order {
 
     private static final int PRICE_PRECISION = 10;
@@ -42,6 +45,7 @@ public class Order {
     private Integer size;
 
     @Column(name = "price", precision = PRICE_PRECISION, scale = PRICE_SCALE)
+    @ColumnTransformer(read = "nullif(price, 'NaN'::numeric)")
     private BigDecimal price;
 
     @Enumerated(EnumType.STRING)
