@@ -10,12 +10,15 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import org.hibernate.annotations.ColumnTransformer;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
 @Entity
 @Table(name = "marketdata")
+@DynamicUpdate
 public class MarketData {
 
     @Id
@@ -37,6 +40,7 @@ public class MarketData {
     private BigDecimal open;
 
     @Column(name = "close", precision = 10, scale = 2)
+    @ColumnTransformer(read = "nullif(close, 'NaN'::numeric)")
     private BigDecimal close;
 
     @Column(name = "previousclose", precision = 10, scale = 2)

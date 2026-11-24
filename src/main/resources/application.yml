@@ -2,6 +2,10 @@ spring:
   application:
     name: cocos-challenge-backend
 
+  jackson:
+    read:
+      strict-duplicate-detection: true
+
   datasource:
     url: ${DB_URL}
     username: ${DB_USERNAME}

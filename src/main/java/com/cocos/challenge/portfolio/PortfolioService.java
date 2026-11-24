@@ -3,8 +3,8 @@ package com.cocos.challenge.portfolio;
 import com.cocos.challenge.account.AccountCalculator;
 import com.cocos.challenge.account.AccountCalculator.Holding;
 import com.cocos.challenge.instrument.InstrumentType;
-import com.cocos.challenge.marketdata.MarketData;
 import com.cocos.challenge.marketdata.MarketDataRepository;
+import com.cocos.challenge.marketdata.MarketDataRepository.ValuationQuote;
 import com.cocos.challenge.order.OrderRepository;
 import com.cocos.challenge.user.UserRepository;
 import org.springframework.stereotype.Service;
@@ -53,8 +53,8 @@ public class PortfolioService {
         BigDecimal total = balances.unidentifiedHolding() ? null : balances.actualCash();
         var positions = new ArrayList<PortfolioResponse.Position>(holdings.size());
         for (Holding holding : holdings) {
-            MarketData quote = quotes.get(holding.instrument().getId());
-            BigDecimal close = quote == null ? null : quote.getClose();
+            ValuationQuote quote = quotes.get(holding.instrument().getId());
+            BigDecimal close = quote == null ? null : quote.close();
             BigDecimal marketValue = close == null || holding.shares() == null ? null
                     : close.multiply(BigDecimal.valueOf(holding.shares()));
             total = total == null || marketValue == null ? null : total.add(marketValue);
@@ -63,21 +63,21 @@ public class PortfolioService {
         return Optional.of(new PortfolioResponse(money(total), money(balances.availableCash()), List.copyOf(positions)));
     }
 
-    private Map<Integer, MarketData> latestQuotes(List<Integer> instrumentIds) {
+    private Map<Integer, ValuationQuote> latestQuotes(List<Integer> instrumentIds) {
         if (instrumentIds.isEmpty()) {
             return Map.of();
         }
         return marketData.findLatestDatedByInstrumentIds(instrumentIds).stream()
-                .collect(Collectors.toMap(quote -> quote.getInstrument().getId(), Function.identity()));
+                .collect(Collectors.toMap(ValuationQuote::instrumentId, Function.identity()));
     }
 
-    private static PortfolioResponse.Position position(Holding holding, MarketData quote,
+    private static PortfolioResponse.Position position(Holding holding, ValuationQuote quote,
                                                        BigDecimal close, BigDecimal marketValue) {
         var instrument = holding.instrument();
         var basis = holding.costBasis();
         BigDecimal totalReturn = close == null || basis == null ? null
                 : percentageChange(close.multiply(new BigDecimal(basis.denominator())), basis.numerator());
-        BigDecimal dailyReturn = quote == null ? null : percentageChange(close, quote.getPreviousClose());
+        BigDecimal dailyReturn = quote == null ? null : percentageChange(close, quote.previousClose());
         return new PortfolioResponse.Position(instrument.getId(), instrument.getTicker(), instrument.getName(),
                 holding.shares(), money(marketValue), totalReturn, dailyReturn);
     }
