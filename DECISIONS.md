@@ -1,0 +1,34 @@
+# Business and technical decisions
+
+## Portfolio
+
+- Calculate total unrealized position return using weighted-average acquisition cost. Reduce shares sold at their current weighted-average cost.
+- Include daily return as `(close - previousclose) / previousclose × 100`. Return null for undefined values, including a zero denominator.
+- Exclude undated quotes and select the latest quote by `date DESC, id DESC`. Market value is signed shares times closing price and requires a close. Unrealized return also requires a defined acquisition cost basis. Return null for a missing position valuation or an undefined return, and for the total account value if a required position valuation is missing.
+- Preserve historical negative holdings. The seed has a filled buy of 20 shares followed by a filled sale of 30 shares for user 1 and instrument 31. Report the resulting −10 shares and include their signed market value in the account total when a close is available. Their unrealized return is null because the cost basis is undefined. Preserve the source orders.
+
+## Cash and reservations
+
+- Only `FILLED` orders affect actual cash and holdings. Include filled `CASH_IN` and `CASH_OUT` movements in ARS cash.
+- A `NEW` buy reserves cash. A `NEW` sell reserves shares. Cancellation releases the reservation.
+- Reserved cash counts toward total account value. Deduct it from available cash only.
+
+## API behavior
+
+- Accept exactly one of quantity or ARS amount for both buys and sells. A market order uses the latest close. A limit order uses the supplied limit price.
+- Return HTTP 201 for persisted submissions, including `REJECTED` orders. Return HTTP 400 for invalid requests, HTTP 404 for unknown resources, and HTTP 409 for invalid state transitions. Only `NEW` orders can be cancelled.
+- Use case-insensitive partial matching for ticker and name. Combine supplied filters with AND. Return all tradable instruments when neither filter is supplied. Exclude the ARS cash instrument from search and buy or sell submissions.
+
+## Monetary precision
+
+- Use `BigDecimal` for all monetary values and financial calculations. Never use `float` or `double` for financial calculations.
+- Preserve the original `NUMERIC(10,2)` schema. Apply its precision and scale limits only to persisted prices. Derived monetary balances can exceed those limits.
+- Accept prices with trailing fractional zeros when they are exactly representable at scale 2. Use `Order.validatePrice` before calculating quantity or reserving cash or shares. Order construction enforces the same check before persistence.
+- Accept ARS order amounts with up to two meaningful decimal places. Divide the amount by the order price at scale 0 with `RoundingMode.DOWN` to get whole shares.
+- Use `MathContext.DECIMAL128` for intermediate divisions that require rounding. Avoid premature rounding in other calculations.
+- Return monetary values with 2 decimal places and percentage returns with 4 decimal places. Use `RoundingMode.HALF_EVEN` when rounding final response values.
+
+## Persistence and concurrency
+
+- Preserve the supplied PostgreSQL schema. Hibernate validates it at startup. Integration tests load the original `database.sql` into isolated Testcontainers PostgreSQL.
+- Order submission and cancellation must acquire a pessimistic write lock on the same user row within their transaction before reading balances, holdings, or order state. Hold the lock through the write.
