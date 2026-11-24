@@ -50,10 +50,12 @@ public class Order {
 
     @Enumerated(EnumType.STRING)
     @Column(name = "type", length = 10)
+    @ColumnTransformer(read = "case when type in ('MARKET', 'LIMIT') then type end")
     private OrderType type;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "side", length = 10)
+    @ColumnTransformer(read = "case when side in ('BUY', 'SELL', 'CASH_IN', 'CASH_OUT') then side end")
     private OrderSide side;
 
     @Enumerated(EnumType.STRING)

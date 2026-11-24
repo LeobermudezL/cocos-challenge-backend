@@ -31,6 +31,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -99,6 +100,24 @@ class OrderCancellationTests {
         assertThat(after.holdings().get(3).shares()).isEqualTo(before.holdings().get(3).shares());
         assertThat(after.availableCash()).isEqualByComparingTo("800.00");
         assertThat(after.availableShares(3)).isEqualTo(10L);
+    }
+
+    @Test
+    void cancelsNewOrderAndPreservesUnrecognizedHistoricalSideAndType() throws Exception {
+        int orderId = addLedgerOrder(2, 1, 2, "10.00", "OLD_SIDE", "NEW");
+        jdbc.update("update orders set type = 'LEGACY' where id = ?", orderId);
+        String originalAttributes = storedAttributes(orderId);
+
+        cancel(2, orderId)
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.side").value(nullValue()))
+                .andExpect(jsonPath("$.type").value(nullValue()));
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(storedStatus(orderId)).isEqualTo("CANCELLED");
+        assertThat(storedAttributes(orderId)).isEqualTo(originalAttributes);
     }
 
     @ParameterizedTest

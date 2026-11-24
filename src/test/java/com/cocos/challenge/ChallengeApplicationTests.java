@@ -247,6 +247,27 @@ class ChallengeApplicationTests {
     }
 
     @Test
+    void keepsKnownPortfolioValuesWithUnrecognizedHistoricalSideAndType() throws Exception {
+        jdbc.update("""
+                update orders set type = 'LEGACY'
+                where userid = 1 and instrumentid = 47 and side = 'BUY' and status = 'FILLED'
+                """);
+        jdbc.update("""
+                insert into orders (instrumentid, userid, size, price, side, status, type, datetime)
+                values (47, 1, 1, 10.00, 'LEGACY', 'NEW', 'LIMIT', '2023-07-14 12:00:00')
+                """);
+
+        mvc.perform(get(PORTFOLIO_PATH, 1))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.availableCash").value(nullValue()))
+                .andExpect(jsonPath("$.totalAccountValue").value(889756.00))
+                .andExpect(jsonPath("$.positions[1].instrumentId").value(47))
+                .andExpect(jsonPath("$.positions[1].shares").value(40))
+                .andExpect(jsonPath("$.positions[1].marketValue").value(37034.00))
+                .andExpect(jsonPath("$.positions[1].totalReturnPercentage").value(-0.4462));
+    }
+
+    @Test
     void treatsNaNOrderPriceAsUnknownAndPreservesItOnAnUnrelatedUpdate() throws Exception {
         Integer orderId = jdbc.queryForObject("""
                 insert into orders (instrumentid, userid, size, price, side, status, type, datetime)
@@ -438,6 +459,31 @@ class ChallengeApplicationTests {
                 .andExpect(jsonPath("$.positions[4].marketValue").value(12.00))
                 .andExpect(jsonPath("$.positions[4].totalReturnPercentage").value(20.0000))
                 .andExpect(jsonPath("$.positions[4].dailyReturnPercentage").value(nullValue()));
+    }
+
+    @Test
+    void preservesCashAndOtherPositionsWhenLatestClosesAreNonPositive() throws Exception {
+        jdbc.update("""
+                insert into marketdata (instrumentid, close, previousclose, date)
+                values (31, -10.00, 10.00, date '2023-07-15'),
+                       (47, 0.00, 10.00, date '2023-07-15')
+                """);
+
+        mvc.perform(get(PORTFOLIO_PATH, 1))
+                .andExpect(status().isOk())
+                .andExpect(content().json("""
+                        {
+                          "totalAccountValue":null,"availableCash":627500.00,
+                          "positions":[
+                            {"instrumentId":31,"ticker":"BMA","name":"Banco Macro S.A.","shares":-10,
+                             "marketValue":null,"totalReturnPercentage":null,"dailyReturnPercentage":null},
+                            {"instrumentId":47,"ticker":"PAMP","name":"Pampa Holding S.A.","shares":40,
+                             "marketValue":null,"totalReturnPercentage":null,"dailyReturnPercentage":null},
+                            {"instrumentId":54,"ticker":"METR","name":"MetroGAS S.A.","shares":500,
+                             "marketValue":114750.00,"totalReturnPercentage":-8.2000,"dailyReturnPercentage":-1.0776}
+                          ]
+                        }
+                        """, JsonCompareMode.STRICT));
     }
 
     @TestConfiguration(proxyBeanMethods = false)

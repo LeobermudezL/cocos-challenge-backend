@@ -188,6 +188,38 @@ class OrderSubmissionTests {
     }
 
     @Test
+    void scopesUnrecognizedHistoricalSideToAffectedResourcesAndIgnoresUnknownType() throws Exception {
+        jdbc.update("""
+                insert into orders (instrumentid, userid, size, price, side, status, type, datetime)
+                values (66, 2, 100, 1.00, 'CASH_IN', 'FILLED', 'MARKET', '2023-07-12 09:00:00'),
+                       (1, 2, 2, 5.00, 'BUY', 'FILLED', 'MARKET', '2023-07-12 09:00:00'),
+                       (2, 2, 2, 5.00, 'BUY', 'FILLED', 'LEGACY', '2023-07-12 09:00:00'),
+                       (1, 2, 1, 5.00, 'LEGACY', 'NEW', 'LIMIT', '2023-07-12 09:00:00')
+                """);
+
+        submit(2, """
+                {"instrumentId":1,"side":"BUY","type":"LIMIT","quantity":1,"price":10}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        submit(2, """
+                {"instrumentId":1,"side":"SELL","type":"LIMIT","quantity":1,"price":10}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("REJECTED"));
+
+        submit(2, """
+                {"instrumentId":2,"side":"SELL","type":"LIMIT","quantity":2,"price":10}
+                """)
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("NEW"));
+
+        assertThat(jdbc.queryForList("select status from orders where userid = 2 order by id", String.class))
+                .containsExactly("FILLED", "FILLED", "FILLED", "NEW", "REJECTED", "REJECTED", "NEW");
+    }
+
+    @Test
     void cannotIncreaseHistoricalNegativeHoldingsButCanReduceThemByBuying() throws Exception {
         submit(1, """
                 {"instrumentId":31,"side":"SELL","type":"MARKET","quantity":1}
@@ -239,6 +271,7 @@ class OrderSubmissionTests {
             "{\"instrumentId\":1,\"side\":\"BUY\",\"type\":\"MARKET\",\"quantity\":1,\"amount\":300}",
             "{\"instrumentId\":1,\"side\":\"BUY\",\"type\":\"LIMIT\",\"quantity\":1,\"quantity\":100,\"price\":10}",
             "{\"instrumentId\":1,\"side\":\"CASH_IN\",\"type\":\"MARKET\",\"quantity\":1}",
+            "{\"instrumentId\":1,\"side\":\"LEGACY\",\"type\":\"MARKET\",\"quantity\":1}",
             "{\"instrumentId\":1,\"side\":0,\"type\":\"MARKET\",\"quantity\":1}",
             "{\"instrumentId\":1,\"side\":\"BUY\",\"type\":\"STOP\",\"quantity\":1}",
             "{\"instrumentId\":1.1,\"side\":\"BUY\",\"type\":\"MARKET\",\"quantity\":1}",

@@ -55,6 +55,9 @@ public class PortfolioService {
         for (Holding holding : holdings) {
             ValuationQuote quote = quotes.get(holding.instrument().getId());
             BigDecimal close = quote == null ? null : quote.close();
+            if (close != null && close.signum() <= 0) {
+                close = null;
+            }
             BigDecimal marketValue = close == null || holding.shares() == null ? null
                     : close.multiply(BigDecimal.valueOf(holding.shares()));
             total = total == null || marketValue == null ? null : total.add(marketValue);
