@@ -16,7 +16,7 @@ public class User {
     @Column(name = "id")
     private Integer id;
 
-    @Column(name = "email", length = 255)
+    @Column(name = "email")
     private String email;
 
     @Column(name = "accountnumber", length = 20)

@@ -37,6 +37,16 @@ docker compose up -d --wait db
 
 Compose binds PostgreSQL to loopback and runs the original [database.sql](database.sql) on first startup with an empty data volume. Hibernate validates the schema at application startup. The HTTP API listens on port `8080`. This setup needs no Neon connection. To stop, interrupt Maven and run `docker compose down`. To start over with the original seed, `docker compose down -v` deletes this project's local database volume and any orders added to it.
 
+### Run from IntelliJ IDEA
+
+Create `.env` as shown above, then start PostgreSQL from the repository root with `docker compose up -d --wait db`.
+
+1. Open **Run → Edit Configurations** and select the run configuration for `com.cocos.challenge.ChallengeApplication`. Set its JRE to Java 21.
+2. In **Environment variables**, select the repository's `.env` using **Browse for .env files and scripts**. If the file picker is unavailable, add `DB_URL`, `DB_USERNAME`, and `DB_PASSWORD` using their values from `.env`.
+3. Click **Apply**, then run the configuration.
+
+Docker Compose reads `.env` for its own settings. The application launched by IntelliJ gets its database settings from the run configuration. [IntelliJ environment variable documentation](https://www.jetbrains.com/help/idea/program-arguments-and-environment-variables.html)
+
 ## Run tests
 
 ```sh
